@@ -436,13 +436,43 @@ func (m Migrator) HasConstraint(value interface{}, name string) bool {
 }
 
 func (m Migrator) ColumnTypes(value interface{}) (columnTypes []gorm.ColumnType, err error) {
+	query := `
+SELECT 
+    c.column_name, 
+    c.is_nullable = 'YES' AS is_nullable, 
+    c.udt_name, 
+    c.character_maximum_length, 
+    c.numeric_precision, 
+    c.numeric_precision_radix, 
+    c.numeric_scale, 
+    c.datetime_precision, 
+    8 * pgt.typlen AS type_length_in_bytes, 
+    c.column_default, 
+    pd.description, 
+    c.identity_increment 
+FROM 
+    information_schema.columns AS c 
+JOIN 
+    pg_type AS pgt ON c.udt_name = pgt.typname 
+JOIN 
+    pg_catalog.pg_class AS pgc ON c.table_name = pgc.relname 
+JOIN 
+    pg_catalog.pg_namespace AS pgn ON c.table_schema = pgn.nspname 
+LEFT JOIN 
+    pg_catalog.pg_description AS pd 
+    ON pd.objsubid = c.ordinal_position 
+    AND pd.objoid = pgc.oid 
+WHERE 
+    table_catalog = ? AND table_schema = ? AND table_name = ?
+`
+
 	columnTypes = make([]gorm.ColumnType, 0)
 	err = m.RunWithValue(value, func(stmt *gorm.Statement) error {
 		var (
 			currentDatabase      = m.DB.Migrator().CurrentDatabase()
 			currentSchema, table = m.CurrentSchema(stmt, stmt.Table)
 			columns, err         = m.queryRaw(
-				"SELECT c.column_name, c.is_nullable = 'YES', c.udt_name, c.character_maximum_length, c.numeric_precision, c.numeric_precision_radix, c.numeric_scale, c.datetime_precision, 8 * typlen, c.column_default, pd.description, c.identity_increment FROM information_schema.columns AS c JOIN pg_type AS pgt ON c.udt_name = pgt.typname LEFT JOIN pg_catalog.pg_description as pd ON pd.objsubid = c.ordinal_position AND pd.objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = c.table_name AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = c.table_schema)) where table_catalog = ? AND table_schema = ? AND table_name = ?",
+				query,
 				currentDatabase, currentSchema, table).Rows()
 		)
 

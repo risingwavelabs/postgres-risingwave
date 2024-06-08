@@ -1,4 +1,4 @@
-module github.com/risingwave/gorm-driver/postgres-risingwave
+module github.com/risingwavelabs/postgres-risingwave
 
 go 1.18
 
